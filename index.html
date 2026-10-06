@@ -9,6 +9,23 @@
   <meta property="og:title" content="안면도 쭈꾸미 원정대 🦑" />
   <meta property="og:description" content="잠실 → 병점 → 안면도 구매항 · 바하호 새벽 선상낚시 1박 2일" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦑</text></svg>" />
+  <!-- PWA: 홈 화면에 추가 + 오프라인 -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="쭈꾸미 원정대" />
+  <!-- 첫 화면이 깜빡이지 않도록 테마를 CSS보다 먼저 결정 -->
+  <script>
+    (function () {
+      var pref = 'auto';
+      try { pref = localStorage.getItem('trip-theme') || 'auto'; } catch (e) {}
+      var dark = pref === 'dark' || (pref === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.mode = dark ? 'dark' : 'light';
+      document.documentElement.dataset.pref = pref;
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
@@ -18,7 +35,10 @@
 <body>
   <header class="hero">
     <div class="hero-inner">
-      <p class="eyebrow">1박 2일 · 태안 안면도</p>
+      <div class="hero-top">
+        <p class="eyebrow">1박 2일 · 태안 안면도</p>
+        <button class="theme-btn" id="theme-btn" type="button" aria-label="화면 테마 바꾸기">🌓</button>
+      </div>
       <h1 id="trip-title">안면도 쭈꾸미 원정대</h1>
       <p id="trip-subtitle" class="subtitle"></p>
       <div class="hero-chips">
@@ -30,54 +50,79 @@
     <div class="waves" aria-hidden="true"></div>
   </header>
 
-  <main>
-    <section class="card tide-card" id="tide" aria-label="출조일 물때" hidden>
-      <div class="tide-head">
-        <div>
-          <h2>🌊 출조일 물때 <span class="mul-badge" id="tide-mul"></span></h2>
-          <p class="tide-sub" id="tide-sub"></p>
+  <!-- 여행 당일에만 보이는 진행 바 -->
+  <button class="live-bar" id="live" type="button" hidden>
+    <span class="live-text" id="live-text"></span>
+    <span class="live-row"><span class="live-progress" aria-hidden="true"><i id="live-fill"></i></span><span class="live-pct" id="live-pct"></span></span>
+  </button>
+
+  <main class="layout">
+    <!-- PC: 왼쪽에 고정되는 지도 / 폰: 물때 다음에 위치 -->
+    <aside class="map-col" id="sec-map" aria-label="경로 지도">
+      <section class="card map-card">
+        <div class="map-toolbar">
+          <div class="seg" role="tablist" aria-label="지도 범위">
+            <button class="seg-btn active" data-day="all" role="tab">전체</button>
+            <button class="seg-btn" data-day="1" role="tab">1일차</button>
+            <button class="seg-btn" data-day="2" role="tab">2일차</button>
+            <button class="seg-btn" data-day="island" role="tab">안면도 🔍</button>
+          </div>
+          <button class="ghost-btn" id="locate-btn" type="button" title="내 위치" aria-label="내 위치">📍</button>
         </div>
-      </div>
-      <p class="tide-mulnote" id="tide-mulnote"></p>
-      <dl class="tide-stats" id="tide-stats"></dl>
-      <div class="tide-chart" id="tide-chart">
-        <div class="tide-tip" id="tide-tip" hidden></div>
-      </div>
-      <p class="tide-note" id="tide-note"></p>
-    </section>
+        <div id="map" role="application" aria-label="여행 경로 지도"></div>
+        <ul class="legend" id="legend"></ul>
+        <div class="naver-routes" id="naver-routes"></div>
+        <p class="map-note" id="map-note">경로선은 대략적인 이동 경로예요. 길찾기는 각 일정의 지도 버튼을 눌러주세요.</p>
+      </section>
+    </aside>
 
-    <section class="card map-card" aria-label="경로 지도">
-      <div class="map-toolbar">
-        <div class="seg" role="tablist" aria-label="일자 선택">
-          <button class="seg-btn active" data-day="all" role="tab">전체</button>
-          <button class="seg-btn" data-day="1" role="tab">1일차</button>
-          <button class="seg-btn" data-day="2" role="tab">2일차</button>
-          <button class="seg-btn" data-day="island" role="tab">안면도 🔍</button>
+    <div class="content-col">
+      <section class="card tide-card" id="sec-tide" aria-label="출조일 물때" hidden>
+        <h2>🌊 출조일 물때 <span class="mul-badge" id="tide-mul"></span></h2>
+        <p class="tide-sub" id="tide-sub"></p>
+        <p class="tide-mulnote" id="tide-mulnote"></p>
+        <dl class="tide-stats" id="tide-stats"></dl>
+        <div class="tide-chart" id="tide-chart">
+          <div class="tide-tip" id="tide-tip" hidden></div>
         </div>
-        <button class="ghost-btn" id="locate-btn" title="내 위치">📍</button>
-      </div>
-      <div id="map" role="application" aria-label="여행 경로 지도"></div>
-      <ul class="legend" id="legend"></ul>
-      <div class="naver-routes" id="naver-routes"></div>
-      <p class="map-note" id="map-note">경로선은 대략적인 이동 경로예요. 길찾기는 각 일정의 지도 버튼을 눌러주세요.</p>
-    </section>
+        <p class="tide-note" id="tide-note"></p>
+      </section>
 
-    <section class="card shots-card" id="route-shots" aria-label="네이버지도 경로 캡처" hidden>
-      <h2>🧭 네이버지도 경로</h2>
-      <div class="shots" id="shots"></div>
-    </section>
+      <section class="card shots-card" id="route-shots" aria-label="네이버지도 경로 캡처" hidden>
+        <h2>🧭 네이버지도 경로</h2>
+        <div class="shots" id="shots"></div>
+      </section>
 
-    <section id="timeline" aria-label="시간대별 일정"></section>
+      <section class="plan" id="sec-plan" aria-label="시간대별 일정">
+        <div class="plan-head">
+          <h2>🗓 일정</h2>
+          <button class="ghost-btn wide" id="toggle-all" type="button">모두 펼치기</button>
+        </div>
+        <div id="timeline"></div>
+      </section>
 
-    <section class="card checklist-card" aria-label="준비물">
-      <h2>🎒 준비물 체크</h2>
-      <ul id="checklist"></ul>
-    </section>
+      <section class="card checklist-card" id="sec-check" aria-label="준비물">
+        <h2>🎒 준비물 체크</h2>
+        <ul id="checklist"></ul>
+      </section>
+
+      <p class="offline-note" id="offline-note">📶 홈 화면에 추가해두면 바다 위처럼 신호가 약한 곳에서도 열려요. 출발 전 와이파이에서 지도를 한 번 둘러보면 그 구역 지도도 저장돼요.</p>
+    </div>
   </main>
 
   <footer>
     <p>지도 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors · 사진: Wikimedia Commons (각 사진 클릭 시 원본/라이선스)</p>
   </footer>
+
+  <!-- 폰 하단 탭바 -->
+  <nav class="tabbar" aria-label="바로가기">
+    <a href="#sec-tide" data-tab="sec-tide"><span>🌊</span>물때</a>
+    <a href="#sec-map" data-tab="sec-map"><span>📍</span>지도</a>
+    <a href="#sec-plan" data-tab="sec-plan"><span>🗓</span>일정</a>
+    <a href="#sec-check" data-tab="sec-check"><span>🎒</span>준비물</a>
+  </nav>
+
+  <div class="toast" id="toast" role="status" hidden></div>
 
   <script src="vendor/leaflet/leaflet.js"></script>
   <script src="data.js"></script>

@@ -1,0 +1,16 @@
+{
+  "name": "안면도 쭈꾸미 원정대",
+  "short_name": "쭈꾸미 원정대",
+  "description": "구매항 피싱게이트 바하호 쭈꾸미·갑오징어 낚시 1박 2일 일정",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b2545",
+  "theme_color": "#0b2545",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
