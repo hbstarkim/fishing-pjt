@@ -9,7 +9,7 @@
   T.legs.forEach((l) => { if (!l.sea && !colorOf[l.to]) colorOf[l.to] = l.color; });
   colorOf.jamsil = T.legs[0].color;
   colorOf.boat = T.legs.find((l) => l.sea)?.color || '#1e88e5';
-  colorOf.bye = '#8d6e63';
+  colorOf.game = '#ab47bc';
 
   /* ---------------- header ---------------- */
   $('#trip-title').textContent = T.title;
@@ -47,6 +47,7 @@
 
   const markers = {};
   T.stops.forEach((s, i) => {
+    if (s.noPin) return; // 같은 장소의 다른 일정(예: 펜션 게임 타임)은 핀을 공유
     const icon = L.divIcon({
       className: '',
       html: `<div class="pin${s.id === nowStopId ? ' now' : ''}" style="background:${colorOf[s.id]}"><span>${s.icon}</span></div>`,
@@ -62,6 +63,11 @@
       );
     m.addTo(map);
     markers[s.id] = m;
+  });
+
+  T.stops.filter((s) => s.noPin).forEach((s) => {
+    const twin = T.stops.find((o) => !o.noPin && o.lat === s.lat && o.lng === s.lng);
+    if (twin) markers[s.id] = markers[twin.id];
   });
 
   const lines = {};
@@ -136,6 +142,129 @@
       { enableHighAccuracy: true, timeout: 8000 },
     );
   });
+
+  /* ---------------- 물때 그래프 ---------------- */
+  const toH = (hm) => {
+    const neg = hm.startsWith('-');
+    const [h, m] = hm.replace('-', '').split(':').map(Number);
+    return (neg ? -1 : 1) * (h + m / 60);
+  };
+  const fmtH = (x) => {
+    const m = Math.round(x * 60);
+    return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  };
+  function renderTide() {
+    const td = T.tide;
+    if (!td) return;
+    $('#tide').hidden = false;
+    $('#tide-mul').textContent = td.mul;
+    if (td.mulNote) $('#tide-mulnote').textContent = td.mulNote;
+    $('#tide-sub').innerHTML = `${esc(td.date)} · ${esc(td.station)} 기준 · <a href="${td.source.url}" target="_blank" rel="noopener">${esc(td.source.label)} ↗</a>`;
+
+    const ext = td.extremes.map((e) => ({ ...e, h: toH(e.t) }));
+    const knots = [...td.edges.map((e) => ({ ...e, h: toH(e.t) })), ...ext].sort((a, b) => a.h - b.h);
+    // 만조·간조 사이를 반주기 코사인으로 보간
+    const level = (x) => {
+      for (let i = 0; i < knots.length - 1; i++) {
+        const a = knots[i], b = knots[i + 1];
+        if (x >= a.h && x <= b.h) return a.cm + (b.cm - a.cm) * (1 - Math.cos(Math.PI * (x - a.h) / (b.h - a.h))) / 2;
+      }
+      return knots[knots.length - 1].cm;
+    };
+    const rising = (x) => level(x + 0.05) > level(x);
+
+    const highs = ext.filter((e) => e.type === 'high');
+    const lows = ext.filter((e) => e.type === 'low');
+    const range = (Math.max(...ext.map((e) => e.cm)) - Math.min(...ext.map((e) => e.cm))) / 100;
+    const w0 = toH(td.window.from), w1 = toH(td.window.to);
+    $('#tide-stats').innerHTML = `
+      <div><dt>만조</dt><dd>${highs.map((e) => e.t).join('<br>')}</dd></div>
+      <div><dt>간조</dt><dd>${lows.map((e) => e.t).join('<br>')}</dd></div>
+      <div><dt>최대 조차</dt><dd>${range.toFixed(1)}<small>m</small></dd></div>`;
+    const inWin = ext.filter((e) => e.h >= w0 && e.h <= w1);
+    $('#tide-note').innerHTML = `⛴ <b>${td.window.from}–${td.window.to} 출조</b> · ` + (inWin.length
+      ? inWin.map((e) => `${e.t} ${e.type === 'high' ? '만조' : '간조'}(${(e.cm / 100).toFixed(1)}m)`).join(', ') +
+        ` 전후로 물이 돌아요. ${rising(w0) ? '들물' : '날물'}로 시작해 ${rising(w1 - 0.01) ? '들물' : '날물'}로 마무리.`
+      : `${rising(w0) ? '들물' : '날물'} 구간이에요.`);
+
+    // --- SVG ---
+    const box = $('#tide-chart');
+    const W = Math.max(300, box.clientWidth);
+    const H = 190;
+    const M = { l: 30, r: 8, t: 26, b: 22 };
+    const iw = W - M.l - M.r, ih = H - M.t - M.b;
+    const yMax = Math.ceil(Math.max(...knots.map((k) => k.cm)) / 200) * 200;
+    const X = (h) => M.l + (h / 24) * iw;
+    const Y = (cm) => M.t + ih - (cm / yMax) * ih;
+    const pts = [];
+    for (let m = 0; m <= 24 * 60; m += 10) pts.push([X(m / 60), Y(level(m / 60))]);
+    const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join('');
+    const area = `${line}L${X(24)},${Y(0)}L${X(0)},${Y(0)}Z`;
+    const sr = toH(td.sunrise), ss = toH(td.sunset);
+
+    let g = '';
+    // 밤 시간대 (일출 전 / 일몰 후)
+    g += `<rect x="${X(0)}" y="${M.t}" width="${X(sr) - X(0)}" height="${ih}" fill="#0b2545" opacity=".05"/>`;
+    g += `<rect x="${X(ss)}" y="${M.t}" width="${X(24) - X(ss)}" height="${ih}" fill="#0b2545" opacity=".05"/>`;
+    // 출조 시간대
+    g += `<rect x="${X(w0)}" y="${M.t}" width="${X(w1) - X(w0)}" height="${ih}" fill="#16b8a6" opacity=".14" rx="4"/>`;
+    g += `<text class="band-lbl" x="${(X(w0) + X(w1)) / 2}" y="${M.t - 8}" text-anchor="middle">${esc(td.window.label)}</text>`;
+    // y 그리드 (m)
+    for (let v = 0; v <= yMax; v += 200) {
+      g += `<line x1="${M.l}" x2="${W - M.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#e8e4dc" stroke-width="1"/>`;
+      g += `<text x="${M.l - 6}" y="${Y(v) + 3.5}" text-anchor="end">${v / 100}m</text>`;
+    }
+    // x 축 (시각)
+    [0, 6, 12, 18, 24].forEach((h) => {
+      g += `<text x="${X(h)}" y="${H - 6}" text-anchor="${h === 0 ? 'start' : h === 24 ? 'end' : 'middle'}">${h}시</text>`;
+    });
+    g += `<text x="${X(sr)}" y="${M.t + ih - 4}" text-anchor="middle">☀︎ ${td.sunrise}</text>`;
+    g += `<text x="${X(ss)}" y="${M.t + ih - 4}" text-anchor="middle">☾ ${td.sunset}</text>`;
+    // 곡선
+    g += `<path d="${area}" fill="var(--tide)" opacity=".1"/>`;
+    g += `<path d="${line}" fill="none" stroke="var(--tide)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    // 만조·간조 점 + 라벨
+    ext.forEach((e) => {
+      const x = X(e.h), y = Y(e.cm);
+      const up = e.type === 'high';
+      const anchor = x < M.l + 30 ? 'start' : x > W - M.r - 30 ? 'end' : 'middle';
+      g += `<circle cx="${x}" cy="${y}" r="4.5" fill="var(--tide)" stroke="#fff" stroke-width="2"/>`;
+      g += `<text class="lbl" x="${x}" y="${up ? y - 9 : y + 17}" text-anchor="${anchor}">${e.t} ${(e.cm / 100).toFixed(1)}m</text>`;
+    });
+    // hover 레이어
+    g += `<line id="tide-x" x1="0" x2="0" y1="${M.t}" y2="${M.t + ih}" stroke="#1b1f2a" stroke-width="1" opacity="0"/>`;
+    g += `<circle id="tide-dot" r="5" fill="var(--tide)" stroke="#fff" stroke-width="2" opacity="0"/>`;
+    g += `<rect id="tide-hit" x="${M.l}" y="0" width="${iw}" height="${H}" fill="transparent"/>`;
+
+    box.querySelector('svg')?.remove();
+    box.insertAdjacentHTML('afterbegin',
+      `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(td.date)} ${esc(td.station)} 조위 그래프: 만조 ${highs.map((e) => e.t).join(', ')}, 간조 ${lows.map((e) => e.t).join(', ')}">${g}</svg>`);
+
+    const svg = box.querySelector('svg');
+    const tip = $('#tide-tip');
+    const vx = $('#tide-x'), dot = $('#tide-dot');
+    const show = (ev) => {
+      const r = svg.getBoundingClientRect();
+      const px = ((ev.clientX - r.left) / r.width) * W;
+      const h = Math.min(24, Math.max(0, ((px - M.l) / iw) * 24));
+      const hh = Math.round(h * 6) / 6; // 10분 단위
+      const cm = level(hh);
+      const x = X(hh);
+      vx.setAttribute('x1', x); vx.setAttribute('x2', x); vx.setAttribute('opacity', '.35');
+      dot.setAttribute('cx', x); dot.setAttribute('cy', Y(cm)); dot.setAttribute('opacity', '1');
+      tip.hidden = false;
+      tip.textContent = `${fmtH(hh)} · ${(cm / 100).toFixed(1)}m · ${rising(hh) ? '들물 ↑' : '날물 ↓'}`;
+      tip.style.left = `${Math.min(Math.max((x / W) * r.width, 70), r.width - 70)}px`;
+      tip.style.top = `${(Y(cm) / H) * r.height - 34}px`;
+    };
+    const hide = () => { tip.hidden = true; vx.setAttribute('opacity', '0'); dot.setAttribute('opacity', '0'); };
+    svg.addEventListener('pointermove', show);
+    svg.addEventListener('pointerdown', show);
+    svg.addEventListener('pointerleave', hide);
+  }
+  renderTide();
+  let rt;
+  window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(renderTide, 150); });
 
   /* ---------------- 네이버지도 앱 길찾기 (URL Scheme) ---------------- */
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
