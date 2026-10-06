@@ -68,6 +68,24 @@
     markers[s.id] = m;
   });
 
+  // 점심 후보 등 선택지 — 작은 🍽 핀
+  const optById = {};
+  const optMarkers = {};
+  T.stops.forEach((s) => (s.options || []).forEach((o) => {
+    optById[o.id] = { ...o, stopId: s.id };
+    optMarkers[o.id] = L.marker([o.lat, o.lng], {
+      icon: L.divIcon({ className: '', html: `<div class="mini-pin${o.pick ? ' pick' : ''}">🍽</div>`, iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -12] }),
+      zIndexOffset: -100,
+    })
+      .bindPopup(
+        `<div class="popup-time">점심 후보 · ${esc(o.area)}</div>
+         <div class="popup-title">${esc(o.name)}</div>
+         <div class="popup-time" style="margin:-4px 0 8px">${esc(o.menu)}</div>
+         <button class="popup-link" data-goto-opt="${o.id}">후보 보기 ↓</button>`,
+      )
+      .addTo(map);
+  }));
+
   T.stops.filter((s) => s.noPin).forEach((s) => {
     const twin = T.stops.find((o) => !o.noPin && o.lat === s.lat && o.lng === s.lng);
     if (twin) markers[s.id] = markers[twin.id];
@@ -101,7 +119,11 @@
     .catch(() => {});
 
   const boundsFor = (day) => {
-    if (day === 'island') return L.latLngBounds(T.stops.filter((s) => s.lat < 36.6).map((s) => [s.lat, s.lng]));
+    if (day === 'island') {
+      const pts = T.stops.filter((s) => s.lat < 36.6).map((s) => [s.lat, s.lng]);
+      Object.values(optById).forEach((o) => pts.push([o.lat, o.lng]));
+      return L.latLngBounds(pts);
+    }
     const pts = [];
     T.stops.filter((s) => day === 'all' || s.day === Number(day)).forEach((s) => pts.push([s.lat, s.lng]));
     T.legs.filter((l) => day === 'all' || (l.day || 1) === Number(day)).forEach((l) => pts.push(...l.path));
@@ -344,6 +366,29 @@
       </figure>`;
   }
 
+  // 점심 후보 목록 (지역별로 묶어서)
+  function optionsHTML(s) {
+    if (!s.options?.length) return '';
+    const areas = [...new Set(s.options.map((o) => o.area))];
+    return `<div class="opts">
+      <h4>🍽 점심 후보 <span>${s.options.length}곳</span></h4>
+      ${areas.map((a) => `<p class="opt-area">${esc(a)}</p>
+        <ul>${s.options.filter((o) => o.area === a).map((o) => {
+          const l = mapLinks({ place: o.name, mapQuery: o.mapQuery });
+          return `<li class="opt${o.pick ? ' pick' : ''}" id="opt-${o.id}">
+            <div class="opt-name">${esc(o.name)}${o.pick ? '<span class="opt-badge">추천</span>' : ''}</div>
+            <p class="opt-menu">${esc(o.menu)}</p>
+            <p class="opt-meta">⏰ ${esc(o.hours)}<br>💡 ${esc(o.note)} · <span class="opt-addr">${esc(o.address)}</span></p>
+            <div class="opt-actions">
+              <button class="btn" data-fly-opt="${o.id}">🗺 위치</button>
+              <a class="btn naver" href="${l.naver}" target="_blank" rel="noopener">네이버</a>
+              <a class="btn kakao" href="${l.kakao}" target="_blank" rel="noopener">카카오</a>
+            </div>
+          </li>`;
+        }).join('')}</ul>`).join('')}
+    </div>`;
+  }
+
   const days = [...new Set(T.stops.map((s) => s.day))];
   const dayLabel = { 1: '첫째 날', 2: '둘째 날' };
   $('#timeline').innerHTML = days
@@ -366,6 +411,7 @@
                 ${s.isSea ? '' : `<a class="btn naver" href="${links.naver}" target="_blank" rel="noopener">네이버지도</a>
                 <a class="btn kakao" href="${links.kakao}" target="_blank" rel="noopener">카카오맵</a>`}
               </div>
+              ${optionsHTML(s)}
             </div>
           </article>
         </li>`;
@@ -408,6 +454,21 @@
       $('#map').scrollIntoView({ behavior: 'smooth', block: 'center' });
       map.flyTo([s.lat, s.lng], s.isSea ? 12 : 15, { duration: 0.8 });
       setTimeout(() => markers[s.id].openPopup(), 850);
+      return;
+    }
+    const flyOpt = e.target.closest('[data-fly-opt]');
+    if (flyOpt) {
+      const o = optById[flyOpt.dataset.flyOpt];
+      $('#map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      map.flyTo([o.lat, o.lng], 15, { duration: 0.8 });
+      setTimeout(() => optMarkers[o.id].openPopup(), 850);
+      return;
+    }
+    const goOpt = e.target.closest('[data-goto-opt]');
+    if (goOpt) {
+      const el = document.getElementById(`opt-${goOpt.dataset.gotoOpt}`);
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      flash(el);
       return;
     }
     const go = e.target.closest('[data-goto]');
