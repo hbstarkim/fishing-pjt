@@ -405,6 +405,8 @@
             <div class="tl-body">
               <h3>${esc(s.title)}${s.who ? `<span class="tl-who">${esc(s.who)}</span>` : ''}</h3>
               <p class="tl-desc">${esc(s.desc)}</p>
+              ${s.steps ? `<ol class="tl-steps">${s.steps.map((t) => `<li>${esc(t)}</li>`).join('')}</ol>` : ''}
+              ${s.tips ? `<ul class="tl-tips">${s.tips.map((t) => `<li>💡 ${esc(t)}</li>`).join('')}</ul>` : ''}
               ${s.address ? `<p class="tl-addr">📍 ${esc(s.address)}</p>` : ''}
               <div class="tl-actions">
                 <button class="btn primary" data-fly="${s.id}">🗺 위치 보기</button>
@@ -480,14 +482,18 @@
   });
 
   /* ---------------- checklist (이 기기에만 저장) ---------------- */
-  const KEY = 'trip-checklist-v1';
+  // 항목 문구를 키로 저장 → 항목을 추가/순서 변경해도 기존 체크가 엉뚱한 줄로 밀리지 않음
+  const KEY = 'trip-checklist-v2';
   let checked = {};
   try { checked = JSON.parse(localStorage.getItem(KEY)) || {}; } catch {}
-  $('#checklist').innerHTML = T.checklist
-    .map((c, i) => `<li><label><input type="checkbox" data-i="${i}" ${checked[i] ? 'checked' : ''}><span>${esc(c)}</span></label></li>`)
+  const groups = T.checklist.map((g) => (typeof g === 'string' ? { items: [g] } : g));
+  const itemHTML = (c) =>
+    `<li><label><input type="checkbox" data-key="${esc(c)}" ${checked[c] ? 'checked' : ''}><span>${esc(c)}</span></label></li>`;
+  $('#checklist').innerHTML = groups
+    .map((g) => `${g.group ? `<li class="check-group">${esc(g.group)}</li>` : ''}${g.items.map(itemHTML).join('')}`)
     .join('');
   $('#checklist').addEventListener('change', (e) => {
-    checked[e.target.dataset.i] = e.target.checked;
+    checked[e.target.dataset.key] = e.target.checked;
     try { localStorage.setItem(KEY, JSON.stringify(checked)); } catch {}
   });
 
