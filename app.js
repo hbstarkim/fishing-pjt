@@ -9,12 +9,15 @@
   T.legs.forEach((l) => { if (!l.sea && !colorOf[l.to]) colorOf[l.to] = l.color; });
   colorOf.jamsil = T.legs[0].color;
   colorOf.boat = T.legs.find((l) => l.sea)?.color || '#1e88e5';
+  colorOf.bbq = '#e53950';
   colorOf.game = '#ab47bc';
 
   /* ---------------- header ---------------- */
   $('#trip-title').textContent = T.title;
   $('#trip-subtitle').textContent = T.subtitle;
   document.title = T.title;
+  const boat = T.stops.find((s) => s.isSea);
+  if (boat) $('#boat-chip').textContent = `⛴ ${boat.time}–${boat.end}`;
 
   const start = T.startDate ? new Date(`${T.startDate}T00:00:00+09:00`) : null;
   const stopDate = (s) => {
