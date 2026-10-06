@@ -137,6 +137,54 @@
     );
   });
 
+  /* ---------------- 네이버지도 앱 길찾기 (URL Scheme) ---------------- */
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const nmapRoute = (ids) => {
+    const pts = ids.map((id) => byId[id]);
+    const s = pts[0];
+    const d = pts[pts.length - 1];
+    const q = new URLSearchParams({
+      slat: s.lat, slng: s.lng, sname: s.place,
+      dlat: d.lat, dlng: d.lng, dname: d.place,
+    });
+    pts.slice(1, -1).slice(0, 5).forEach((v, i) => {
+      q.set(`v${i + 1}lat`, v.lat);
+      q.set(`v${i + 1}lng`, v.lng);
+      q.set(`v${i + 1}name`, v.place);
+    });
+    q.set('appname', location.hostname || 'fishing-trip');
+    // URLSearchParams는 공백을 '+'로 바꾸는데 앱에 따라 그대로 보이므로 %20으로
+    return `nmap://route/car?${q.toString().replace(/\+/g, '%20')}`;
+  };
+  $('#naver-routes').innerHTML = (T.naverRoutes || [])
+    .map((r, i) => `<button class="naver-btn" data-nroute="${i}"><b>N</b>${esc(r.label)}</button>`)
+    .join('');
+  $('#naver-routes').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-nroute]');
+    if (!b) return;
+    const r = T.naverRoutes[b.dataset.nroute];
+    if (!isMobile) {
+      alert('네이버지도 앱 길찾기는 휴대폰에서 열 수 있어요.');
+      return;
+    }
+    location.href = nmapRoute(r.stops);
+    // 앱이 없으면 페이지가 그대로 남아 있으므로 스토어로 안내
+    setTimeout(() => {
+      if (document.hidden) return;
+      location.href = /Android/i.test(navigator.userAgent)
+        ? 'market://details?id=com.nhn.android.nmap'
+        : 'https://apps.apple.com/kr/app/id311867728';
+    }, 1800);
+  });
+
+  // 네이버지도 캡처 이미지
+  if ((T.routeImages || []).length) {
+    $('#shots').innerHTML = T.routeImages
+      .map((im) => `<figure><a href="${im.src}" target="_blank"><img src="${im.src}" alt="${esc(im.caption)}" loading="lazy"></a><figcaption>${esc(im.caption)}</figcaption></figure>`)
+      .join('');
+    $('#route-shots').hidden = false;
+  }
+
   /* ---------------- timeline ---------------- */
   const mapLinks = (s) => {
     const q = encodeURIComponent(s.mapQuery || s.place);
